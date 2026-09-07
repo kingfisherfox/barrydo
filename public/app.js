@@ -5,8 +5,8 @@
 //   2. Projects are GROUPS on one Home page (accordion, state remembered), not a separate view.
 // VIEWS: Home (all groups) · task detail · project edit · history.
 
-const APP_VERSION = "1.4.3";
-const APP_BUILD = "2026-09-07.7";
+const APP_VERSION = "1.4.4";
+const APP_BUILD = "2026-09-07.8";
 
 const $ = (s, el = document) => el.querySelector(s);
 const view = $("#view");
@@ -261,6 +261,14 @@ async function renderSettings() {
     </div>
     <div class="panel">
       <div class="panel-title">Account</div>
+      <div class="setrow">
+        <div class="setrow-main">
+          <div class="setrow-label">Key &amp; password</div>
+          <div class="setrow-sub">Your API key is also your app password. It can't be changed here — rotate it from the CLI:</div>
+          <div class="codeblock mono">openssl rand -base64 32 | tr -d '/+=' | head -c 40<br>npx wrangler secret put API_KEY</div>
+          <div class="setrow-sub">Takes effect immediately — no redeploy. Then sign out and unlock with the new key.</div>
+        </div>
+      </div>
       <div class="setrow setrow-last">
         <div class="setrow-main">
           <div class="setrow-label">Sign out</div>
@@ -394,7 +402,7 @@ function showLogin(err = "") {
       <div class="login-card">
         <img src="/icons/icon.svg" alt="barrydo">
         <h1>barrydo</h1>
-        <p>Tasks + projects, keyed to you alone.</p>
+        <p>Your API key is your password — set when barrydo was installed.</p>
         <form data-form="login">
           <div class="login-err">${esc(err)}</div>
           <div class="field">

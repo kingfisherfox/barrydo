@@ -60,8 +60,37 @@ npm install
 5. Generate a strong API key and store it as a Worker secret
 6. Deploy, then print **your URL, your API key, and a ready-to-paste MCP config**
 
-Save the printed key — it's your only credential (re-show it anytime in
-Settings → MCP inside the app).
+Save the printed key — **it is your password for the web app** and your agents'
+credential in one. It is not shown anywhere else at setup time, cannot be changed
+inside the app, and cannot be recovered if lost (you'd generate a new one — see below).
+
+## Your API key is your password
+
+The single `API_KEY` secret does double duty:
+
+- **Web app login**: opening the PWA asks for the key once per device — that *is* the
+  login screen (no usernames, no registration, it's just you)
+- **Agents / API clients**: the same value in the `Authorization: Bearer …` header for
+  MCP and REST
+
+Because it's stored as a Cloudflare Worker secret, it is **never editable from inside
+the app** — by design. Inside the app you can *view* it (Settings → MCP, to copy when
+wiring a new tool), but changing it is a CLI operation.
+
+## Changing / rotating the key
+
+No redeploy is needed — a secret update takes effect immediately:
+
+```bash
+openssl rand -base64 32 | tr -d '/+=' | head -c 40   # or any strong string
+npx wrangler secret put API_KEY                       # paste the new key
+```
+
+After rotating: the old key stops working instantly. Re-enter the new key in the PWA
+(Settings → Account → Sign out, then unlock), and update the header in any connected
+agents. Nothing else changes — tasks and history are untouched.
+
+**Lost the key?** Same command — rotate to a new one and log back in.
 
 ## Manual setup (if you prefer)
 
@@ -84,16 +113,6 @@ npx wrangler deploy                                 # → https://<name>.<subdom
 3. Wire agents: Settings → MCP inside the app shows the endpoint, the
    `Authorization: Bearer …` header, and a copy-ready JSON config for MCP clients
 
-## Rotating the key
-
-```bash
-openssl rand -base64 32 | tr -d '/+=' | head -c 40
-npx wrangler secret put API_KEY     # paste the new key
-```
-
-The old key dies instantly. Re-enter it in the PWA (lock icon → Settings → Sign out)
-and update any connected agents.
-
 ## Local development
 
 ```bash
@@ -113,8 +132,10 @@ error of these budgets. No paid plan needed.
 
 ## Security model
 
-- One shared secret (`API_KEY`), constant-time-compared (SHA-256 digests) on every
-  `/api/*` and `/mcp` request
+- One shared secret (`API_KEY`): your web-app login *and* your agents' bearer token —
+  constant-time-compared (SHA-256 digests) on every `/api/*` and `/mcp` request
+- The key lives only in Cloudflare's secret store (and wherever you save it); it is
+  not editable in-app, only rotatable via the CLI
 - HTTPS everywhere (workers.dev), CORS on `/mcp` for browser-based MCP clients
 - No user accounts, no PII, no telemetry; soft deletes only — your history is yours
 - The repo contains no secrets and no account-specific config: keys live in
