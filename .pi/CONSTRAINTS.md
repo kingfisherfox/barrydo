@@ -5,6 +5,7 @@
 - **History is forever.** Completed + deleted tasks stay queryable indefinitely.
 - **Date-only due dates** (YYYY-MM-DD). No times, no timezones stored.
 - **Priorities:** high / medium / low / none. Nothing else validates.
+- **Project names are unique** (case-insensitive, enforced in `src/db.ts` with 409 on create/rename) — names are resolvable refs, duplicates would be ambiguous.
 - **PWA online-only.** Service worker exists for installability only — never add offline caching of data.
 - **Lightweight frontend.** Vanilla JS/CSS, Atlassian-flavoured tokens, no framework, no external font/CDN dependencies.
 - **Cloudflare-only infra:** Worker (compute + MCP), D1 (data), Workers Assets (PWA), workers.dev domain.

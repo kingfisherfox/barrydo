@@ -20,3 +20,10 @@ Next-Session: fresh clone + ./setup.sh end-to-end on a throwaway Cloudflare acco
 
 ## 2026-09-07 — v1.5.1: empty-project cards identical to non-empty
 - User feedback: the 18px drop-sliver under open empty groups read as a stray "second section". Removed — every project card is header + count badge only, identical whether it holds 0 or N tasks; the badge (grey/orange/blue) carries the state. Moving into empty groups still works (drop on their header or strip card).
+
+## 2026-09-07 — v1.5.0/v1.5.1 deployed to production; offboarding sync
+- Production shipped: migration 0003 applied to remote D1, then deploys `9727abd1` (v1.5.0) and `299fd51c` (v1.5.1) to <your-deployment>.workers.dev; live checks passed (served app.js 1.5.1, /api/projects on migrated schema, dup-name 409 probe — no data written).
+- Ops: wrangler OAuth token re-issued via browser consent — old token had lost `d1:write` (migrations 7403); remedy recorded in docs/ACCESS.md.
+- Offboarding sync: CONSTRAINTS.md gained the unique-project-names invariant; ACCESS.md deployment history brought current; commit hashes for this session's work: v1.5.0 = `bbea733`, v1.5.1 = `70e6a58`.
+Commit: (this entry)
+Next-Session: fresh clone + ./setup.sh end-to-end on a throwaway Cloudflare account (pending since v1.4.4); optional: decode %-escapes in path segments so project-name refs containing spaces resolve.
