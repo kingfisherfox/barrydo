@@ -1,5 +1,7 @@
 # barrydo
 
+![barrydo — Home](docs/screenshot.png)
+
 A single-user task manager you own end-to-end: a mobile-first PWA for yourself,
 plus an [MCP](https://modelcontextprotocol.io) server so your AI agents and chat tools can
 create, read, and manage your tasks and projects directly.
