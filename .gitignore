@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+.dev.vars
+wrangler.jsonc
+docs/ACCESS.md
+dist/
+.DS_Store
