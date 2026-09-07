@@ -5,8 +5,8 @@
 //   2. Projects are GROUPS on one Home page (accordion, state remembered), not a separate view.
 // VIEWS: Home (all groups) · task detail · project edit · history.
 
-const APP_VERSION = "1.5.0";
-const APP_BUILD = "2026-09-07.9";
+const APP_VERSION = "1.5.1";
+const APP_BUILD = "2026-09-07.10";
 
 const $ = (s, el = document) => el.querySelector(s);
 const view = $("#view");

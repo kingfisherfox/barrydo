@@ -12,8 +12,11 @@ Next-Session: run a fresh clone + ./setup.sh end-to-end on a throwaway Cloudflar
 ## 2026-09-07 — v1.5.0: project drag ordering, unique project names, badge states
 - Projects became manually ordered like tasks: migration 0003 (`projects.position`, backfill id order), `POST /api/projects/reorder`, grip handles on Home group cards reusing the task drag system (`.dropgap`/`.dragging`, pointer-events for touch); Inbox pinned first, strip mirrors settled order client-side.
 - Duplicate project names rejected (case-insensitive, 409) on create + rename, REST and MCP — names are resolvable refs, duplicates would be ambiguous. Guard lives in `db.ts`, deliberately not a DB unique index so legacy deployments with dupes still migrate.
-- Home group headers simplified: no `P#` ref, no "No active tasks" text; count badge now carries state — grey (0 active), orange (any active task overdue), on both group chip and strip badge, computed client-side from due dates. Empty open groups keep an 18px drop sliver.
+- Home group headers simplified: no `P#` ref, no "No active tasks" text; count badge now carries state — grey (0 active), orange (any active task overdue), on both group chip and strip badge, computed client-side from due dates. Moving into empty groups works via their headers and strip cards.
 - Verified against running app: tsc + JS syntax, REST gauntlet (409 dupes both cases, rename-to-self OK, reorder persists, 400 bad body), MCP list/create/update paths, browser DOM assertions + synthetic pointer-event drags (project reorder persisted across reload; task move-to-inbox regression clean; badge state flips live).
 - Known nit observed, pre-existing, not fixed here: percent-encoded spaces in project-name URL refs 404 (`/api/projects/My%20Proj`) — pathname is not decoded; refs `P3`, plain ids, and space-free names work.
 Commit: (this session)
 Next-Session: fresh clone + ./setup.sh end-to-end on a throwaway Cloudflare account (still pending from last session); consider decoding %-escapes in path segments if name-refs with spaces matter.
+
+## 2026-09-07 — v1.5.1: empty-project cards identical to non-empty
+- User feedback: the 18px drop-sliver under open empty groups read as a stray "second section". Removed — every project card is header + count badge only, identical whether it holds 0 or N tasks; the badge (grey/orange/blue) carries the state. Moving into empty groups still works (drop on their header or strip card).
