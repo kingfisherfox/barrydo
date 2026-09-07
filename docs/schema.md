@@ -1,31 +1,14 @@
-# Schema — D1 (SQLite)
+# Schema — intent and invariants
 
-## projects
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK AUTOINCREMENT | stable project number (`P<id>`); never reused |
-| name | TEXT | required, ≤200 |
-| description | TEXT | optional |
-| created_at / updated_at | TEXT | ISO-8601 UTC |
+Structure (tables, columns, refs, indexes) lives in **[`docs/database/schema.dbml`](database/schema.dbml)** — the canonical, agent-edited schema home. This page records only the why.
 
-## tasks
-| column | type | notes |
-|---|---|---|
-| id | INTEGER PK AUTOINCREMENT | stable task number (`T<id>`, or `P<proj>-T<id>`); never reused |
-| title | TEXT | required, ≤500 |
-| description | TEXT | optional |
-| project_id | INTEGER NULL | FK projects ON DELETE SET NULL (project delete → inbox) |
-| status | TEXT | `active` \| `completed` \| `deleted` (soft delete) |
-| priority | TEXT | `high` \| `medium` \| `low` \| `none` |
-| due_date | TEXT NULL | YYYY-MM-DD, date only |
-| position | REAL | manual drag order; rebalanced by `POST /api/tasks/reorder` (i×100); default list sort |
-| created_at / updated_at | TEXT | ISO-8601 UTC |
-| completed_at | TEXT NULL | set on complete, cleared on reopen/restore |
-| deleted_at | TEXT NULL | set on soft delete, cleared on reopen/restore |
+## Ownership & tiers
+- One D1 SQLite database per deployment, created by `setup.sh` / `wrangler d1 create`.
+- `migrations/` is the structural source of truth; the DBML mirrors it; `src/db.ts` is the only code that speaks SQL.
 
-## Invariants
-- **No hard deletes of tasks** — `deleted` status keeps history complete and refs stable.
-- **History** = every task with `status != 'active'` (completed + deleted), forever.
-- **Ref display** is derived: task ref mutates when the task moves between project/inbox; the numeric id never changes.
-- **Task ordering** is manual (`position ASC`); new tasks append at the bottom (max position + 1000). History lists sort by `updated_at DESC` instead.
-- Indexes: status, project_id, due_date, position.
+## Invariants (why, not what)
+- **No hard task deletes, ever.** Deletion is a status flip (`deleted`) so refs stay stable and history stays complete — the user's contract is "history is forever, restorable."
+- **Stable numbering.** Task/project ids are AUTOINCREMENT and never reused; the human-facing ref (`T12` / `P3-T12`) is derived at serialization and may mutate when a task moves between project and inbox — the numeric identity never does.
+- **Manual ordering is user truth.** `position` is the default sort; new tasks append. Due-date grouping and priority are presentation, not storage order — deliberately, so drag order survives UI redesigns.
+- **Date-only dues** (YYYY-MM-DD) — the product treats tasks as day-granular; no times, no timezone storage, local-device interpretation.
+- **Single-user data.** No ownership columns anywhere: the API key IS the tenancy boundary. Any future multi-user work would need a breaking migration — that's a product decision, not a schema patch.

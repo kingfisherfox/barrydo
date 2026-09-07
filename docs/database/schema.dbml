@@ -1,0 +1,41 @@
+// barrydo — canonical schema (D1 / SQLite). Agent-edited by contract; A://IDE renders this path.
+// Migration source of truth: migrations/*.sql — this file mirrors their structure.
+// Refs are DERIVED, never stored: P<projectId>-T<taskId> when assigned, else T<taskId>.
+
+Table app.projects {
+  id INTEGER [pk, increment]
+  name TEXT [not null, note: '1–200 chars']
+  description TEXT [not null, default: '']
+  created_at TEXT [not null, note: 'ISO-8601 UTC']
+  updated_at TEXT [not null, note: 'ISO-8601 UTC']
+
+  Note: '''Project ref = P<id>. ids are AUTOINCREMENT → never reused.
+Project delete is a hard row delete; its tasks fall to the inbox (ON DELETE SET NULL).'''
+}
+
+Table app.tasks {
+  id INTEGER [pk, increment]
+  title TEXT [not null, note: '1–500 chars']
+  description TEXT [not null, default: '']
+  project_id INTEGER [ref: > app.projects.id]
+  status TEXT [not null, default: 'active', note: 'active | completed | deleted — soft delete only, no purge path exists']
+  priority TEXT [not null, default: 'none', note: 'high | medium | low | none']
+  due_date TEXT [note: 'YYYY-MM-DD, date only; NULL = no due date']
+  position REAL [not null, default: 0, note: 'manual drag order; rebalanced i×100 by POST /api/tasks/reorder; new tasks append max+1000']
+  created_at TEXT [not null, note: 'ISO-8601 UTC']
+  updated_at TEXT [not null, note: 'ISO-8601 UTC']
+  completed_at TEXT [note: 'set on complete, cleared on reopen/restore']
+  deleted_at TEXT [note: 'set on soft delete, cleared on reopen/restore']
+
+  indexes {
+    status
+    project_id
+    due_date
+    position
+  }
+
+  Note: '''History = every row with status != active, forever. Default list order:
+position ASC; history views order by updated_at DESC instead.'''
+}
+
+Ref: app.tasks.project_id > app.projects.id [delete: set null]

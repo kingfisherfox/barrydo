@@ -19,7 +19,7 @@ migrations/       — D1 migrations (schema only — no data)
 wrangler.template.jsonc — tracked config template (wrangler.jsonc is generated + gitignored)
 setup.sh          — one-command bootstrap: D1 + migrations + key secret + deploy
 LICENSE           — MIT
-docs/             — CODE_INDEX.md (this), schema.md, api-surface.md
+docs/             — CODE_INDEX.md (this), schema.md (intent), database/schema.dbml (structure), api-surface.md, screenshot.png, ACCESS.md (gitignored, private)
 .pi/              — AGENTS.md, CONSTRAINTS.md, DECISIONS.md
 ```
 
