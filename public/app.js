@@ -5,8 +5,8 @@
 //   2. Projects are GROUPS on one Home page (accordion, state remembered), not a separate view.
 // VIEWS: Home (all groups) · task detail · project edit · history.
 
-const APP_VERSION = "1.4.4";
-const APP_BUILD = "2026-09-07.8";
+const APP_VERSION = "1.5.0";
+const APP_BUILD = "2026-09-07.9";
 
 const $ = (s, el = document) => el.querySelector(s);
 const view = $("#view");
@@ -121,33 +121,38 @@ function quickAdd(projects) {
 
 /** Sticky project strip — tap = jump to group, drop a dragged task = move. */
 function projectStrip(projects, tasks) {
-  const inboxCount = tasks.filter((t) => !t.project).length;
+  const inboxTasks = tasks.filter((t) => !t.project);
+  const badgeCls = (list) => (overdueIn(list) ? "overdue" : list.length ? "" : "zero");
   return `
   <div class="projstrip">
-    <div class="pcard" data-action="scrollgroup" data-g="inbox" data-dropproj="inbox">${INBOXICON}<span>Inbox</span><b data-stripfor="inbox">${inboxCount}</b></div>
+    <div class="pcard" data-action="scrollgroup" data-g="inbox" data-dropproj="inbox">${INBOXICON}<span>Inbox</span><b data-stripfor="inbox" class="${badgeCls(inboxTasks)}">${inboxTasks.length}</b></div>
     ${projects.map((p) => `
     <div class="pcard" data-action="scrollgroup" data-g="p${p.id}" data-dropproj="${p.id}">${FOLDER}
-      <span class="pname">${esc(p.name)}</span><b data-stripfor="p${p.id}">${p.active_tasks}</b>
+      <span class="pname">${esc(p.name)}</span><b data-stripfor="p${p.id}" class="${badgeCls(tasks.filter((t) => t.project?.id === p.id))}">${p.active_tasks}</b>
     </div>`).join("")}
   </div>`;
 }
 
-/** One accordion group: Inbox or a project. key: "inbox" | "p<id>". */
+/** Any active task in the list past due (date-only compare, ISO strings sort lexicographically)? */
+const overdueIn = (tasks) => tasks.some((t) => t.due_date && t.due_date < localToday());
+
+/** One accordion group: Inbox or a project. key: "inbox" | "p<id>". Projects carry a drag handle (reorder). */
 function groupCard(opts) {
-  const { key, name, ref, pid, tasks } = opts;
+  const { key, name, pid, tasks } = opts;
   const closed = !!COLLAPSED[key];
+  const chipCls = overdueIn(tasks) ? "overdue" : tasks.length ? "" : "zero";
   return `
   <div class="pgroup ${closed ? "closed" : ""}" id="g-${key}" data-pid="${pid ?? ""}" data-pgroup="${esc(name.toLowerCase())}">
     <div class="pgroup-head" data-action="collapse" data-key="${key}">
+      ${pid ? `<span class="drag pgroup-drag" data-drag="proj" title="Drag to reorder projects">${GRIP}</span>` : ""}
       <span class="pgroup-ic">${pid ? FOLDER : INBOXICON}</span>
-      <div class="pgroup-name">${esc(name)} ${ref ? `<span class="ref">${ref}</span>` : ""}</div>
-      <span class="count-chip" data-countfor="${key}">${tasks.length}</span>
+      <div class="pgroup-name">${esc(name)}</div>
+      <span class="count-chip ${chipCls}" data-countfor="${key}">${tasks.length}</span>
       ${pid ? `<button class="icon-btn pgroup-edit" data-action="editproject" data-id="${pid}" aria-label="edit project">${PENCIL}</button>` : ""}
       <span class="chev">${CHEV}</span>
     </div>
     <div class="pgroup-body">
       <div class="cardstack">${tasks.map((t) => taskRow(t, true)).join("")}</div>
-      ${tasks.length ? "" : `<div class="pgroup-empty">No active tasks</div>`}
     </div>
   </div>`;
 }
@@ -165,16 +170,24 @@ function toast(msg) {
 
 // group/count DOM helpers (optimistic updates use these)
 const groupEl = (key) => view.querySelector(`#g-${CSS.escape(key)}`);
-const bumpCount = (key, delta) => {
+/** Badge state: orange when the group holds an overdue task chip, grey when empty, default otherwise. */
+function badgeState(g, count) {
+  if (g.querySelector(".chip.due.overdue")) return "overdue";
+  return count ? "" : "zero";
+}
+function paintBadge(el, state) {
+  el.classList.toggle("overdue", state === "overdue");
+  el.classList.toggle("zero", state === "zero");
+}
+function bumpCount(key, delta) {
   const g = groupEl(key);
   if (!g) return;
   const chip = g.querySelector("[data-countfor]");
   chip.textContent = Math.max(0, Number(chip.textContent) + delta);
-  const empty = g.querySelector(".pgroup-empty");
-  if (empty) empty.style.display = Number(chip.textContent) ? "none" : "";
+  paintBadge(chip, badgeState(g, Number(chip.textContent)));
   const strip = view.querySelector(`[data-stripfor="${key}"]`);
-  if (strip) strip.textContent = Math.max(0, Number(strip.textContent) + delta);
-};
+  if (strip) { strip.textContent = chip.textContent; paintBadge(strip, badgeState(g, Number(chip.textContent))); }
+}
 function setGroupOpen(key, open) {
   const g = groupEl(key);
   if (!g) return;
@@ -195,7 +208,7 @@ async function renderHome() {
     ${projects.length ? projectStrip(projects, tasks) : ""}
     ${quickAdd(projects)}
     ${groupCard({ key: "inbox", name: "Inbox", tasks: inboxTasks })}
-    ${projects.map((p) => groupCard({ key: "p" + p.id, name: p.name, ref: p.ref, pid: p.id, tasks: byProject.get(p.id) || [] })).join("")}
+    ${projects.map((p) => groupCard({ key: "p" + p.id, name: p.name, pid: p.id, tasks: byProject.get(p.id) || [] })).join("")}
     <a class="manage-link" href="#/settings">Manage projects in Settings →</a>`;
 }
 
@@ -414,15 +427,16 @@ function showLogin(err = "") {
     </div>`;
 }
 
-// ─── drag & drop (reorder + move between groups / onto strip cards) ──────────
+// ─── drag & drop (tasks: reorder + move between groups / strip; projects: reorder groups) ──
 
 let suppressClick = false;
 let drag = null;
 
 function clearDrag() {
   if (!drag) return;
-  drag.row?.classList.remove("dragging");
-  if (drag.row) drag.row.style.cssText = "";
+  const el = drag.row ?? drag.grp;
+  el?.classList.remove("dragging");
+  if (el) el.style.cssText = "";
   drag.ph?.remove();
   document.querySelectorAll(".droptarget").forEach((n) => n.classList.remove("droptarget"));
   drag = null;
@@ -433,11 +447,22 @@ function initDrag() {
     if (e.button > 0) return;
     const handle = e.target.closest("[data-drag]");
     if (!handle) return;
+    if (handle.dataset.drag === "proj") {
+      // project groups only (never Inbox) — reorder among themselves; Inbox stays pinned first
+      const grp = handle.closest(".pgroup");
+      if (!grp || !grp.dataset.pid) return;
+      if (drag && drag.started) clearDrag(); // interrupted sequence — reset cleanly
+      drag = {
+        kind: "proj", grp, x: e.clientX, y: e.clientY, started: false,
+        ids0: [...view.querySelectorAll(".pgroup[data-pid]")].map((g) => g.dataset.pid).join(","),
+      };
+      return;
+    }
     const row = handle.closest(".row");
     if (!row) return;
     if (drag && drag.started) clearDrag(); // second finger / interrupted sequence — reset cleanly
     drag = {
-      row, id: row.dataset.id, x: e.clientX, y: e.clientY, started: false,
+      kind: "task", row, id: row.dataset.id, x: e.clientX, y: e.clientY, started: false,
       ids0: [...view.querySelectorAll(".row")].map((r) => r.dataset.id).join(","),
       origKey: row.closest(".pgroup")?.id?.replace(/^g-/, "") || null,
     };
@@ -449,18 +474,28 @@ function initDrag() {
       if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 8) return;
       drag.started = true;
       suppressClick = true;
-      const r = drag.row.getBoundingClientRect();
+      const el = drag.row ?? drag.grp;
+      const r = el.getBoundingClientRect();
       drag.offY = e.clientY - r.top;
       drag.ph = document.createElement("div");
       drag.ph.className = "dropgap";
       drag.ph.style.height = r.height + "px";
-      drag.row.after(drag.ph);
-      drag.row.classList.add("dragging");
-      Object.assign(drag.row.style, { position: "fixed", width: r.width + "px", left: r.left + "px", top: e.clientY - drag.offY + "px", zIndex: 99 });
+      el.after(drag.ph);
+      el.classList.add("dragging");
+      Object.assign(el.style, { position: "fixed", width: r.width + "px", left: r.left + "px", top: e.clientY - drag.offY + "px", zIndex: 99 });
     }
-    drag.row.style.top = e.clientY - drag.offY + "px";
+    (drag.row ?? drag.grp).style.top = e.clientY - drag.offY + "px";
     const el = document.elementFromPoint(e.clientX, e.clientY);
     document.querySelectorAll(".droptarget").forEach((n) => n.classList.remove("droptarget"));
+    if (drag.kind === "proj") {
+      // vertical reorder among project groups (Inbox excluded — pinned first)
+      const target = el?.closest?.(".pgroup");
+      if (target && target !== drag.grp && target.dataset.pid) {
+        const tr = target.getBoundingClientRect();
+        target.parentNode.insertBefore(drag.ph, e.clientY < tr.top + tr.height / 2 ? target : target.nextSibling);
+      }
+      return;
+    }
     drag.proj = undefined;
     const proj = el?.closest?.("[data-dropproj]");
     if (proj) {
@@ -494,6 +529,7 @@ function initDrag() {
 
   async function finish() {
     if (!drag) return;
+    if (drag.kind === "proj") return finishProj();
     const { id, started, proj, ph, row, ids0, origKey } = drag;
     if (!started) { drag = null; return; }
     const phParent = ph?.parentNode;
@@ -530,6 +566,28 @@ function initDrag() {
       }
       const ids = [...view.querySelectorAll(".row")].map((r) => Number(r.dataset.id));
       if (ids.join(",") !== ids0) await post("/api/tasks/reorder", { ids });
+    } catch { route(); }
+  }
+  /** Project group drop: settle DOM order, mirror it onto the strip, persist via /api/projects/reorder. */
+  async function finishProj() {
+    const { grp, ph, started, ids0 } = drag;
+    if (!started) { drag = null; return; }
+    if (ph && ph.parentNode) ph.replaceWith(grp);
+    grp.classList.remove("dragging");
+    grp.style.cssText = "";
+    document.querySelectorAll(".droptarget").forEach((n) => n.classList.remove("droptarget"));
+    drag = null;
+    setTimeout(() => (suppressClick = false), 250);
+    const ids = [...view.querySelectorAll(".pgroup[data-pid]")].map((g) => Number(g.dataset.pid));
+    if (ids.join(",") === ids0) return; // no actual move
+    const strip = view.querySelector(".projstrip");
+    if (strip) for (const pid of ids) {
+      const card = strip.querySelector(`[data-dropproj="${pid}"]`);
+      if (card) strip.appendChild(card); // re-append in new order; Inbox card stays first
+    }
+    try {
+      await post("/api/projects/reorder", { ids });
+      toast("Project order saved");
     } catch { route(); }
   }
   document.addEventListener("pointerup", finish);
@@ -669,8 +727,6 @@ document.addEventListener("submit", async (e) => {
       if (!grp) return;
       setGroupOpen(key, true);
       const stack = grp.querySelector(".pgroup-body .cardstack");
-      const empty = grp.querySelector(".pgroup-empty");
-      if (empty) empty.style.display = "none";
       const temp = document.createElement("div");
       temp.innerHTML = taskRow({ id: "tmp", ref: "…", title: v.title, description: v.description || "", status: "active", priority: body.priority || "none", due_date: v.due_date || null, project: null }, true).replace('class="row ', 'class="row pending ');
       const tempRow = temp.firstElementChild;
@@ -689,7 +745,7 @@ document.addEventListener("submit", async (e) => {
         toast(`Added ${task.ref}`);
       } catch (err) {
         tempRow.remove();
-        bumpCount(key, 0); // re-evaluates empty state
+        bumpCount(key, 0); // repaint badge state (e.g. back to zero-grey)
         throw err;
       } finally {
         addBtn.disabled = false;

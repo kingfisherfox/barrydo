@@ -9,6 +9,7 @@ Structure (tables, columns, refs, indexes) lives in **[`docs/database/schema.dbm
 ## Invariants (why, not what)
 - **No hard task deletes, ever.** Deletion is a status flip (`deleted`) so refs stay stable and history stays complete — the user's contract is "history is forever, restorable."
 - **Stable numbering.** Task/project ids are AUTOINCREMENT and never reused; the human-facing ref (`T12` / `P3-T12`) is derived at serialization and may mutate when a task moves between project and inbox — the numeric identity never does.
-- **Manual ordering is user truth.** `position` is the default sort; new tasks append. Due-date grouping and priority are presentation, not storage order — deliberately, so drag order survives UI redesigns.
+- **Manual ordering is user truth.** `position` is the default sort for tasks AND projects; new rows append. Due-date grouping and priority are presentation, not storage order — deliberately, so drag order survives UI redesigns. Inbox is pinned first on Home; projects reorder among themselves.
+- **Project names are unique (case-insensitive).** Names are resolvable refs (`resolveProjectRef`), so duplicates would be ambiguous — rejected with 409 on create and rename. Uniqueness lives in `db.ts`, not a DB index, so deployments holding legacy duplicates still migrate cleanly.
 - **Date-only dues** (YYYY-MM-DD) — the product treats tasks as day-granular; no times, no timezone storage, local-device interpretation.
 - **Single-user data.** No ownership columns anywhere: the API key IS the tenancy boundary. Any future multi-user work would need a breaking migration — that's a product decision, not a schema patch.

@@ -6,7 +6,7 @@ Single-user task/project manager hosted as one Cloudflare Worker: serves the PWA
 ## User Stories
 - As the owner, I add/edit/complete/delete tasks (title, description, High/Medium/Low/None priority, date-only due) and see instant UI feedback — never a spinner-driven duplicate.
 - As the owner, I group tasks into projects and manage them on one Home page (accordion groups, remembered collapse state); projects are a grouping mechanism, not a destination.
-- As the owner, I reorder and move tasks by drag (touch included) and keep a permanent, restorable history of everything completed or deleted.
+- As the owner, I reorder tasks and projects by drag (touch included), move tasks between groups, and keep a permanent, restorable history of everything completed and deleted.
 - As an agent (an MCP client / a chat client / any MCP client), I perform every one of those operations via 14 MCP tools using stable numbered refs.
 
 ## Information Flow
@@ -17,7 +17,7 @@ Single-user task/project manager hosted as one Cloudflare Worker: serves the PWA
 ## Terminology
 - **Ref** — derived task identity: `T12` inbox / `P3-T12` in project; bare ids and project names also resolve everywhere.
 - **Soft delete** — `status='deleted'`; history = everything not active.
-- **Position** — REAL column encoding manual drag order.
+- **Position** — REAL column on tasks AND projects encoding manual drag order; project names are unique case-insensitive (names are refs too).
 
 ## Key Files
 - `src/index.ts` — the ONLY auth check + routing

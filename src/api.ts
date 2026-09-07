@@ -2,7 +2,7 @@
 // All handlers throw ApiError(status, msg); index.ts catches and serializes.
 
 import type { Env } from "./env";
-import { ApiError, assertDueDate, assertPriority, assertTitle, assertName, createProject, createTask, deleteProject, getTask, listProjects, listTasks, parseTaskRef, reorderTasks, resolveProjectRef, setTaskStatus, updateProject, updateTask, STATUSES, type Status } from "./db";
+import { ApiError, assertDueDate, assertPriority, assertTitle, assertName, createProject, createTask, deleteProject, getTask, listProjects, listTasks, parseTaskRef, reorderTasks, reorderProjects, resolveProjectRef, setTaskStatus, updateProject, updateTask, STATUSES, type Status } from "./db";
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
@@ -35,6 +35,11 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
         const b = await body(req);
         return json({ project: await createProject(env, { name: assertName(b.name), description: b.description as string | undefined }) }, 201);
       }
+    }
+    if (seg.length === 2 && seg[1] === "reorder" && method === "POST") {
+      const b = await body(req);
+      if (!Array.isArray(b.ids) || !b.ids.length) throw new ApiError(400, "Body { ids: [project ids in new order] } required");
+      return json({ ok: true, reordered: await reorderProjects(env, b.ids.map((n: unknown) => Number(n))) });
     }
     if (seg.length === 2) {
       const id = await resolveProjectRef(env, seg[1]);

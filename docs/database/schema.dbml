@@ -4,12 +4,19 @@
 
 Table app.projects {
   id INTEGER [pk, increment]
-  name TEXT [not null, note: '1–200 chars']
+  name TEXT [not null, note: '1–200 chars, unique case-insensitive (enforced in db.ts → 409, not a DB index — legacy dupes must still migrate)']
   description TEXT [not null, default: '']
+  position REAL [not null, default: 0, note: 'manual drag order; rebalanced i×100 by POST /api/projects/reorder; new projects append max+1000']
   created_at TEXT [not null, note: 'ISO-8601 UTC']
   updated_at TEXT [not null, note: 'ISO-8601 UTC']
 
+  indexes {
+    position
+  }
+
   Note: '''Project ref = P<id>. ids are AUTOINCREMENT → never reused.
+Default list order: position ASC, id ASC. On Home, Inbox is pinned before all projects;
+projects reorder among themselves via drag (same mechanism as tasks).
 Project delete is a hard row delete; its tasks fall to the inbox (ON DELETE SET NULL).'''
 }
 

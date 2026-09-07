@@ -38,9 +38,17 @@ export interface ProjectRow {
   id: number;
   name: string;
   description: string;
+  position: number;
   created_at: string;
   updated_at: string;
   active_count?: number;
+}
+
+/** Case-insensitive duplicate-name guard. excludeId: own id when renaming. Returns the conflicting row or null. */
+async function findDuplicateName(env: Env, name: string, excludeId?: number) {
+  const sql = `SELECT id, name FROM projects WHERE lower(name) = lower(?) ${excludeId ? "AND id != ?" : ""} LIMIT 1`;
+  const stmt = excludeId ? env.DB.prepare(sql).bind(name, excludeId) : env.DB.prepare(sql).bind(name);
+  return stmt.first<{ id: number; name: string }>();
 }
 
 // ─── serializers ─────────────────────────────────────────────────────────────
@@ -222,14 +230,18 @@ export async function reorderTasks(env: Env, ids: number[]): Promise<number> {
 export async function listProjects(env: Env) {
   const { results } = await env.DB.prepare(
     `SELECT p.*, (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'active') AS active_count
-     FROM projects p ORDER BY p.id`
+     FROM projects p ORDER BY p.position, p.id`
   ).all<ProjectRow>();
   return results.map(serializeProject);
 }
 
 export async function createProject(env: Env, input: { name: string; description?: string }) {
+  const dup = await findDuplicateName(env, input.name);
+  if (dup) throw new ApiError(409, `A project named "${dup.name}" already exists (P${dup.id}) — project names must be unique`);
   const desc = typeof input.description === "string" ? input.description.slice(0, 2000) : "";
-  await env.DB.prepare(`INSERT INTO projects (name, description) VALUES (?, ?)`).bind(input.name, desc).run();
+  await env.DB.prepare(`INSERT INTO projects (name, description, position)
+                        VALUES (?, ?, (SELECT COALESCE(MAX(position), 0) + 1000 FROM projects))`)
+    .bind(input.name, desc).run();
   const row = await env.DB.prepare(`SELECT p.*, 0 AS active_count FROM projects p ORDER BY id DESC LIMIT 1`).first<ProjectRow>();
   return serializeProject(row!);
 }
@@ -238,8 +250,11 @@ export async function updateProject(env: Env, id: number, patch: { name?: string
   const sets: string[] = [`updated_at = ${NOW}`];
   const params: unknown[] = [];
   if (patch.name !== undefined) {
+    const name = assertName(patch.name);
+    const dup = await findDuplicateName(env, name, id);
+    if (dup) throw new ApiError(409, `A project named "${dup.name}" already exists (P${dup.id}) — project names must be unique`);
     sets.push("name = ?");
-    params.push(assertName(patch.name));
+    params.push(name);
   }
   if (patch.description !== undefined) {
     sets.push("description = ?");
@@ -249,6 +264,14 @@ export async function updateProject(env: Env, id: number, patch: { name?: string
   const res = await env.DB.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`).bind(...params, id).run();
   if (!res.meta.changes) throw new ApiError(404, `Project P${id} not found`);
   return null;
+}
+
+/** Rebalance project positions to match the given id order (i*100). Order-only: no updated_at bump. */
+export async function reorderProjects(env: Env, ids: number[]): Promise<number> {
+  const clean = ids.filter((n) => Number.isInteger(n) && n > 0).slice(0, 1000);
+  if (!clean.length) return 0;
+  await env.DB.batch(clean.map((id, i) => env.DB.prepare(`UPDATE projects SET position = ? WHERE id = ?`).bind((i + 1) * 100, id)));
+  return clean.length;
 }
 
 /** Soft-frees tasks to inbox, then removes the project. History keeps composite refs pointing at the bare task number. */
