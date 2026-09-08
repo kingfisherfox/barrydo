@@ -27,3 +27,14 @@ Next-Session: fresh clone + ./setup.sh end-to-end on a throwaway Cloudflare acco
 - Offboarding sync: CONSTRAINTS.md gained the unique-project-names invariant; ACCESS.md deployment history brought current; commit hashes for this session's work: v1.5.0 = `bbea733`, v1.5.1 = `70e6a58`.
 Commit: (this entry)
 Next-Session: fresh clone + ./setup.sh end-to-end on a throwaway Cloudflare account (pending since v1.4.4); optional: decode %-escapes in path segments so project-name refs containing spaces resolve.
+
+## 2026-09-08 — Home UX overhaul: search replaces strip, header-tap add, freshness-on-return (v1.5.2→v1.6.1)
+- Removed project-edit pencil from Home group headers; editing lives in Settings only
+- Group-header tap now opens quick-add pre-targeted to that group; fold/unfold moved to the chevron
+- Quick-add project select mirrors dragged project order live (task-detail select already inherited it from /api/projects)
+- Deleted the sticky project strip (jump/flash, drop-to-move, badge mirrors) and replaced it with fuzzy search: live subsequence filtering over titles + refs + project names, project-name hits show all their tasks, force-open while searching, ✕/Esc clears
+- PWA freshness: read-only views re-fetch when the tab becomes visible after >60s hidden — fixes "synced task invisible" false negatives (a synced agent client sync writes arrive via MCP while the app sits open)
+- Diagnosed the reported sync failure: the synced task HAD synced + completed; a synced agent client's engine was fine except edits (D2) — reversed D2 in sync-client (update_task push, 23/23 tests green, uncommitted there)
+- Deployed v1.6.1 to production (c413f934); installed Cloudflare agent skills + 5 CF MCP servers per developers.cloudflare.com/agent-setup
+Commit: `0d92c66`
+Next-Session: a synced agent client edit-sync (D2 reversal) needs app rebuild+restart to go live; consider backfilling 13 pre-sync todos lacking remoteRef
