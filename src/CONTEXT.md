@@ -8,7 +8,7 @@ Single-user task/project manager hosted as one Cloudflare Worker: serves the PWA
 - As the owner, I group tasks into projects and manage them on one Home page (accordion groups, remembered collapse state); projects are a grouping mechanism, not a destination. Tapping a group header starts a task in that group; folding lives on the chevron.
 - As the owner, I fuzzy-search tasks and projects from the top of Home and see the list filter as I type — a project-name hit shows that project's tasks.
 - As the owner, I reorder tasks and projects by drag (touch included), move tasks between groups, and keep a permanent, restorable history of everything completed and deleted.
-- As an agent (an MCP client / a chat client / any MCP client), I perform every one of those operations via 14 MCP tools using stable numbered refs.
+- As an agent (any MCP client), I perform every one of those operations via 14 MCP tools using stable numbered refs.
 
 ## Information Flow
 - **Inputs:** PWA fetches → `/api/*`; agent JSON-RPC POSTs → `/mcp`; both carry `Authorization: Bearer <API_KEY>` (env secret).

@@ -19,8 +19,8 @@ Runs entirely on Cloudflare's **free tier**.
         │        └── D1 SQLite (tasks, projects)     │
         └────────────────────────────────────────────┘
              ▲                    ▲
-        your phone/desktop     your agents (an MCP client,
-        (PWA, key = login)     a chat client, any MCP client)
+        your phone/desktop     your agents (any
+        (PWA, key = login)     MCP client)
 ```
 
 ## Features

@@ -22,7 +22,7 @@ Next-Session: fresh clone + ./setup.sh end-to-end on a throwaway Cloudflare acco
 - User feedback: the 18px drop-sliver under open empty groups read as a stray "second section". Removed — every project card is header + count badge only, identical whether it holds 0 or N tasks; the badge (grey/orange/blue) carries the state. Moving into empty groups still works (drop on their header or strip card).
 
 ## 2026-09-07 — v1.5.0/v1.5.1 deployed to production; offboarding sync
-- Production shipped: migration 0003 applied to remote D1, then deploys `9727abd1` (v1.5.0) and `299fd51c` (v1.5.1) to <your-deployment>.workers.dev; live checks passed (served app.js 1.5.1, /api/projects on migrated schema, dup-name 409 probe — no data written).
+- Production shipped: migration 0003 applied to remote D1, then deploys `9727abd1` (v1.5.0) and `299fd51c` (v1.5.1) to production; live checks passed (served app.js 1.5.1, /api/projects on migrated schema, dup-name 409 probe — no data written).
 - Ops: wrangler OAuth token re-issued via browser consent — old token had lost `d1:write` (migrations 7403); remedy recorded in docs/ACCESS.md.
 - Offboarding sync: CONSTRAINTS.md gained the unique-project-names invariant; ACCESS.md deployment history brought current; commit hashes for this session's work: v1.5.0 = `bbea733`, v1.5.1 = `70e6a58`.
 Commit: (this entry)
@@ -33,8 +33,8 @@ Next-Session: fresh clone + ./setup.sh end-to-end on a throwaway Cloudflare acco
 - Group-header tap now opens quick-add pre-targeted to that group; fold/unfold moved to the chevron
 - Quick-add project select mirrors dragged project order live (task-detail select already inherited it from /api/projects)
 - Deleted the sticky project strip (jump/flash, drop-to-move, badge mirrors) and replaced it with fuzzy search: live subsequence filtering over titles + refs + project names, project-name hits show all their tasks, force-open while searching, ✕/Esc clears
-- PWA freshness: read-only views re-fetch when the tab becomes visible after >60s hidden — fixes "synced task invisible" false negatives (a synced agent client sync writes arrive via MCP while the app sits open)
-- Diagnosed the reported sync failure: the synced task HAD synced + completed; a synced agent client's engine was fine except edits (D2) — reversed D2 in sync-client (update_task push, 23/23 tests green, uncommitted there)
+- PWA freshness: read-only views re-fetch when the tab becomes visible after >60s hidden — fixes "synced task invisible" false negatives (agent-sync writes arrive via MCP while the app sits open)
+- Diagnosed the reported sync failure: the task HAD synced + completed server-side; the external sync client's engine was fine except edit pushes — reversed its D2 decision (update_task push, 23/23 tests green, uncommitted in its private repo)
 - Deployed v1.6.1 to production (c413f934); installed Cloudflare agent skills + 5 CF MCP servers per developers.cloudflare.com/agent-setup
 Commit: `0d92c66`
-Next-Session: a synced agent client edit-sync (D2 reversal) needs app rebuild+restart to go live; consider backfilling 13 pre-sync todos lacking remoteRef
+Next-Session: external todo-sync client's edit-sync needs its app rebuild+restart to go live; consider backfilling its 13 pre-sync todos lacking remoteRef

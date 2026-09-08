@@ -821,7 +821,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").cat
 if ("scrollRestoration" in history) history.scrollRestoration = "manual"; // we own scroll — see hashchange
 window.addEventListener("hashchange", () => { window.scrollTo(0, 0); route(); }); // every navigation opens at the top
 // freshness: returning to the tab after >60s away re-fetches read-only views —
-// tasks pushed by agents (a synced agent client sync) or other devices appear on return,
+// tasks pushed by agents (agent sync) or other devices appear on return,
 // not only on the next navigation. Edit forms (task/settings/project) are exempt.
 let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => {
