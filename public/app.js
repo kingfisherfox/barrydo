@@ -3,10 +3,12 @@
 // UX LAWS:
 //   1. Optimistic-first: creates/completes/moves/reorders update the DOM instantly, network settles in background.
 //   2. Projects are GROUPS on one Home page (accordion, state remembered), not a separate view.
+//   3. Tap a group header = add a task to that group (quick-add pre-targets it); the chevron folds/unfolds.
+//   4. Search is live: fuzzy over task titles/refs + project names; a project-name hit shows all its tasks.
 // VIEWS: Home (all groups) · task detail · project edit · history.
 
-const APP_VERSION = "1.5.1";
-const APP_BUILD = "2026-09-07.10";
+const APP_VERSION = "1.6.1";
+const APP_BUILD = "2026-09-08.15";
 
 const $ = (s, el = document) => el.querySelector(s);
 const view = $("#view");
@@ -14,6 +16,7 @@ const view = $("#view");
 let KEY = localStorage.getItem("barrydo_key") || "";
 let ADD_OPEN = false;      // quick-add options row
 let HIST_TAB = "all";      // history filter
+let SEARCH = "";           // home fuzzy filter (session-only)
 
 // collapse state: { "inbox": true, "p3": false, ... } — persisted
 let COLLAPSED = {};
@@ -62,7 +65,7 @@ const BACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const FOLDER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
 const INBOXICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>`;
 const CHEV = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-const PENCIL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>`;
+const SEARCHICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`;
 
 function taskRow(t, draggable = false, opts = {}) {
   const done = t.status === "completed";
@@ -72,7 +75,7 @@ function taskRow(t, draggable = false, opts = {}) {
   const handle = draggable && t.status === "active" ? `<span class="drag" data-drag title="Drag to reorder · drop on a project to move">${GRIP}</span>` : "";
   const showProj = opts.showProject !== false;
   return `
-  <div class="row ${t.status !== "active" ? "is-done" : ""}" data-action="open" data-id="${t.id}">
+  <div class="row ${t.status !== "active" ? "is-done" : ""}" data-action="open" data-id="${t.id}" data-search="${esc(t.ref + " " + t.title)}">
     ${handle}
     ${check}
     <div class="row-main">
@@ -119,37 +122,59 @@ function quickAdd(projects) {
   </form>`;
 }
 
-/** Sticky project strip — tap = jump to group, drop a dragged task = move. */
-function projectStrip(projects, tasks) {
-  const inboxTasks = tasks.filter((t) => !t.project);
-  const badgeCls = (list) => (overdueIn(list) ? "overdue" : list.length ? "" : "zero");
-  return `
-  <div class="projstrip">
-    <div class="pcard" data-action="scrollgroup" data-g="inbox" data-dropproj="inbox">${INBOXICON}<span>Inbox</span><b data-stripfor="inbox" class="${badgeCls(inboxTasks)}">${inboxTasks.length}</b></div>
-    ${projects.map((p) => `
-    <div class="pcard" data-action="scrollgroup" data-g="p${p.id}" data-dropproj="${p.id}">${FOLDER}
-      <span class="pname">${esc(p.name)}</span><b data-stripfor="p${p.id}" class="${badgeCls(tasks.filter((t) => t.project?.id === p.id))}">${p.active_tasks}</b>
-    </div>`).join("")}
-  </div>`;
+/** Fuzzy subsequence score over hay: 0 = no match. Bonuses for word-starts + consecutive runs; gap penalty. */
+function fuzzyScore(q, hay) {
+  const n = q.toLowerCase().replace(/\s+/g, "");
+  if (!n) return 1;
+  const h = hay.toLowerCase();
+  let score = 0, hi = 0, streak = 0;
+  for (const ch of n) {
+    const idx = h.indexOf(ch, hi);
+    if (idx < 0) return 0;
+    score += 10 + streak * 4 + (idx === 0 || /[^a-z0-9]/.test(h[idx - 1]) ? 8 : 0) - Math.min(idx - hi, 5);
+    streak = idx === hi ? streak + 1 : 0;
+    hi = idx + 1;
+  }
+  return score;
+}
+
+/** Live filter: hide non-matching rows + groups; a project-name hit shows all its tasks. */
+function applySearch(q) {
+  SEARCH = q.trim();
+  const active = !!SEARCH;
+  view.classList.toggle("searching", active);
+  let shown = 0, groups = 0;
+  view.querySelectorAll(".pgroup").forEach((g) => {
+    const nameHit = active && fuzzyScore(SEARCH, g.querySelector(".pgroup-name")?.textContent || "") > 0;
+    let n = 0;
+    g.querySelectorAll(".row").forEach((r) => {
+      const hit = !active || nameHit || fuzzyScore(SEARCH, r.dataset.search || "") > 0;
+      r.style.display = hit ? "" : "none";
+      if (hit) n++;
+    });
+    g.style.display = active && !n ? "none" : "";
+    if (n) { groups++; shown += n; }
+  });
+  const note = $("#search-note");
+  if (note) note.textContent = active ? (shown ? `${shown} task${shown === 1 ? "" : "s"} · ${groups} group${groups === 1 ? "" : "s"}` : "No matches") : "";
 }
 
 /** Any active task in the list past due (date-only compare, ISO strings sort lexicographically)? */
 const overdueIn = (tasks) => tasks.some((t) => t.due_date && t.due_date < localToday());
 
-/** One accordion group: Inbox or a project. key: "inbox" | "p<id>". Projects carry a drag handle (reorder). */
+/** One accordion group: Inbox or a project. key: "inbox" | "p<id>". Head = add task to this group; chevron = fold. Projects carry a drag handle (reorder). */
 function groupCard(opts) {
   const { key, name, pid, tasks } = opts;
   const closed = !!COLLAPSED[key];
   const chipCls = overdueIn(tasks) ? "overdue" : tasks.length ? "" : "zero";
   return `
   <div class="pgroup ${closed ? "closed" : ""}" id="g-${key}" data-pid="${pid ?? ""}" data-pgroup="${esc(name.toLowerCase())}">
-    <div class="pgroup-head" data-action="collapse" data-key="${key}">
+    <div class="pgroup-head" data-action="addtaskto" data-g="${key}" title="Add a task to ${esc(name)}">
       ${pid ? `<span class="drag pgroup-drag" data-drag="proj" title="Drag to reorder projects">${GRIP}</span>` : ""}
       <span class="pgroup-ic">${pid ? FOLDER : INBOXICON}</span>
       <div class="pgroup-name">${esc(name)}</div>
       <span class="count-chip ${chipCls}" data-countfor="${key}">${tasks.length}</span>
-      ${pid ? `<button class="icon-btn pgroup-edit" data-action="editproject" data-id="${pid}" aria-label="edit project">${PENCIL}</button>` : ""}
-      <span class="chev">${CHEV}</span>
+      <span class="chev" data-action="collapse" data-key="${key}" role="button" aria-label="fold or unfold ${esc(name)}">${CHEV}</span>
     </div>
     <div class="pgroup-body">
       <div class="cardstack">${tasks.map((t) => taskRow(t, true)).join("")}</div>
@@ -185,8 +210,6 @@ function bumpCount(key, delta) {
   const chip = g.querySelector("[data-countfor]");
   chip.textContent = Math.max(0, Number(chip.textContent) + delta);
   paintBadge(chip, badgeState(g, Number(chip.textContent)));
-  const strip = view.querySelector(`[data-stripfor="${key}"]`);
-  if (strip) { strip.textContent = chip.textContent; paintBadge(strip, badgeState(g, Number(chip.textContent))); }
 }
 function setGroupOpen(key, open) {
   const g = groupEl(key);
@@ -205,11 +228,17 @@ async function renderHome() {
   const byProject = new Map(projects.map((p) => [p.id, []]));
   for (const t of tasks) if (t.project && byProject.has(t.project.id)) byProject.get(t.project.id).push(t);
   view.innerHTML = `
-    ${projects.length ? projectStrip(projects, tasks) : ""}
+    <div class="searchbar">
+      ${SEARCHICON}
+      <input id="q" type="search" placeholder="Search tasks & projects" value="${esc(SEARCH)}" autocomplete="off" spellcheck="false" aria-label="Search tasks and projects">
+      <button class="icon-btn" type="button" data-action="clearsearch" aria-label="Clear search" ${SEARCH ? "" : "hidden"}>✕</button>
+    </div>
+    <div class="search-note" id="search-note" aria-live="polite"></div>
     ${quickAdd(projects)}
     ${groupCard({ key: "inbox", name: "Inbox", tasks: inboxTasks })}
     ${projects.map((p) => groupCard({ key: "p" + p.id, name: p.name, pid: p.id, tasks: byProject.get(p.id) || [] })).join("")}
     <a class="manage-link" href="#/settings">Manage projects in Settings →</a>`;
+  if (SEARCH) applySearch(SEARCH);
 }
 
 async function renderSettings() {
@@ -438,7 +467,6 @@ function clearDrag() {
   el?.classList.remove("dragging");
   if (el) el.style.cssText = "";
   drag.ph?.remove();
-  document.querySelectorAll(".droptarget").forEach((n) => n.classList.remove("droptarget"));
   drag = null;
 }
 
@@ -486,7 +514,6 @@ function initDrag() {
     }
     (drag.row ?? drag.grp).style.top = e.clientY - drag.offY + "px";
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    document.querySelectorAll(".droptarget").forEach((n) => n.classList.remove("droptarget"));
     if (drag.kind === "proj") {
       // vertical reorder among project groups (Inbox excluded — pinned first)
       const target = el?.closest?.(".pgroup");
@@ -494,13 +521,6 @@ function initDrag() {
         const tr = target.getBoundingClientRect();
         target.parentNode.insertBefore(drag.ph, e.clientY < tr.top + tr.height / 2 ? target : target.nextSibling);
       }
-      return;
-    }
-    drag.proj = undefined;
-    const proj = el?.closest?.("[data-dropproj]");
-    if (proj) {
-      drag.proj = proj.dataset.dropproj;
-      proj.classList.add("droptarget");
       return;
     }
     const target = el?.closest?.(".row");
@@ -530,26 +550,17 @@ function initDrag() {
   async function finish() {
     if (!drag) return;
     if (drag.kind === "proj") return finishProj();
-    const { id, started, proj, ph, row, ids0, origKey } = drag;
+    const { id, started, ph, row, ids0, origKey } = drag;
     if (!started) { drag = null; return; }
-    const phParent = ph?.parentNode;
     if (ph && ph.parentNode) ph.replaceWith(row);
     row.classList.remove("dragging");
     row.style.cssText = "";
-    document.querySelectorAll(".droptarget").forEach((n) => n.classList.remove("droptarget"));
     drag = null;
     setTimeout(() => (suppressClick = false), 250);
 
     const newKey = row.closest(".pgroup")?.id?.replace(/^g-/, "") || null;
     let movedTo = null; // null = none, "inbox", or pid number
-
-    if (proj !== undefined) {
-      // dropped on a strip card → move to that project/inbox
-      const pid = proj === "inbox" ? null : Number(proj);
-      const targetBody = groupEl(pid ? "p" + pid : "inbox")?.querySelector(".pgroup-body .cardstack");
-      if (targetBody) targetBody.prepend(row);
-      movedTo = pid === null ? "inbox" : pid;
-    } else if (newKey && newKey !== origKey) {
+    if (newKey && newKey !== origKey) {
       // dragged into a different group on the page → move
       const pidNum = newKey === "inbox" ? null : Number(newKey.replace(/^p/, ""));
       movedTo = pidNum === null ? "inbox" : pidNum;
@@ -575,15 +586,14 @@ function initDrag() {
     if (ph && ph.parentNode) ph.replaceWith(grp);
     grp.classList.remove("dragging");
     grp.style.cssText = "";
-    document.querySelectorAll(".droptarget").forEach((n) => n.classList.remove("droptarget"));
     drag = null;
     setTimeout(() => (suppressClick = false), 250);
     const ids = [...view.querySelectorAll(".pgroup[data-pid]")].map((g) => Number(g.dataset.pid));
     if (ids.join(",") === ids0) return; // no actual move
-    const strip = view.querySelector(".projstrip");
-    if (strip) for (const pid of ids) {
-      const card = strip.querySelector(`[data-dropproj="${pid}"]`);
-      if (card) strip.appendChild(card); // re-append in new order; Inbox card stays first
+    const sel = view.querySelector('select[name="project"]');
+    if (sel) for (const pid of ids) {
+      const opt = sel.querySelector(`option[value="${pid}"]`);
+      if (opt) sel.appendChild(opt); // mirror the new order into the quick-add dropdown; Inbox option stays first
     }
     try {
       await post("/api/projects/reorder", { ids });
@@ -621,21 +631,31 @@ document.addEventListener("click", async (e) => {
     case "open": if (!e.target.closest("[data-action]:not([data-action=open])")) location.hash = `#/task/${id}`; break;
     case "back": history.length > 1 ? history.back() : (location.hash = "#/inbox"); break;
     case "addopts": ADD_OPEN = !ADD_OPEN; route(); break;
+    case "addtaskto": {
+      // open quick-add pre-targeted at this group (Inbox or a project), focus the title
+      if (e.target.closest("[data-drag]")) break; // handle taps aren't add intents
+      ADD_OPEN = true;
+      const form = view.querySelector('[data-form="addtask"]');
+      if (!form) break;
+      form.querySelector(".qa-opts")?.classList.add("open");
+      const sel = form.querySelector('select[name="project"]');
+      if (sel) sel.value = g?.startsWith("p") ? g.slice(1) : "";
+      form.scrollIntoView({ behavior: "smooth", block: "center" });
+      form.querySelector('input[name="title"]')?.focus({ preventScroll: true });
+      break;
+    }
     case "collapse": {
       const grp = el.closest(".pgroup");
       const willOpen = grp.classList.contains("closed");
       setGroupOpen(key, willOpen);
       break;
     }
-    case "scrollgroup": {
-      const grp = groupEl(g);
-      if (grp) {
-        setGroupOpen(g, true);
-        grp.scrollIntoView({ behavior: "smooth", block: "start" });
-        grp.classList.remove("flash");
-        void grp.offsetWidth; // restart animation
-        grp.classList.add("flash");
-      }
+    case "clearsearch": {
+      const inp = $("#q");
+      if (inp) inp.value = "";
+      applySearch("");
+      el.hidden = true;
+      inp?.focus();
       break;
     }
     case "toggle": {
@@ -742,6 +762,7 @@ document.addEventListener("submit", async (e) => {
         const { task } = await post("/api/tasks", body);
         tempRow.outerHTML = taskRow(task, true);
         bumpCount(key, 1);
+        if (SEARCH) applySearch(SEARCH); // new card obeys the active filter
         toast(`Added ${task.ref}`);
       } catch (err) {
         tempRow.remove();
@@ -781,7 +802,34 @@ document.addEventListener("submit", async (e) => {
 // ─── boot ───────────────────────────────────────────────────────────────────
 
 initDrag();
+// live fuzzy search (delegated — survives view re-renders)
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "q") return;
+  applySearch(e.target.value);
+  const clr = view.querySelector('[data-action="clearsearch"]');
+  if (clr) clr.hidden = !e.target.value;
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && e.target.id === "q" && e.target.value) {
+    e.target.value = "";
+    applySearch("");
+    const clr = view.querySelector('[data-action="clearsearch"]');
+    if (clr) clr.hidden = true;
+  }
+});
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 if ("scrollRestoration" in history) history.scrollRestoration = "manual"; // we own scroll — see hashchange
 window.addEventListener("hashchange", () => { window.scrollTo(0, 0); route(); }); // every navigation opens at the top
+// freshness: returning to the tab after >60s away re-fetches read-only views —
+// tasks pushed by agents (a synced agent client sync) or other devices appear on return,
+// not only on the next navigation. Edit forms (task/settings/project) are exempt.
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { hiddenAt = Date.now(); return; }
+  const away = hiddenAt && Date.now() - hiddenAt > 60_000;
+  hiddenAt = 0;
+  if (!away || !KEY) return;
+  if (["task", "settings", "project"].includes((location.hash || "#/inbox").slice(2).split("/")[0])) return;
+  route();
+});
 route();

@@ -29,9 +29,10 @@ Runs entirely on Cloudflare's **free tier**.
   numbered refs (`T12` in inbox, `P3-T12` inside project 3) that are never reused
 - **Projects**: create/edit/delete; deleting a project moves its tasks to the inbox
 - **Home page**: everything on one page — inbox + every project as an accordion group,
-  collapsible with state remembered per device, 2-tab nav (Home / History)
-- **Drag & drop** (touch-capable): reorder tasks and projects, drag tasks between groups,
-  drag onto the project strip to move; dragging over a collapsed group expands it live.
+  collapsible with state remembered per device, 2-tab nav (Home / History); tap a group
+  header to add a task to that group; fuzzy search (tasks + projects) filters live as you type
+- **Drag & drop** (touch-capable): reorder tasks and projects, drag tasks between groups;
+  dragging over a collapsed group expands it live.
   Project names must be unique (case-insensitive) — duplicates are rejected
 - **Optimistic UI**: task creation and completion render *instantly* — no waiting on the
   network, no accidental double-creates
